@@ -8,7 +8,8 @@ param(
     # 타겟 (우선 x86_64-windows-msvc로 테스트하고,
     # 나중에 aarch64-android로 바꿔도 됨. NDK 필요)
     # [string]$Target = "x86_64-windows-msvc"
-    [string]$Target = "aarch64-oe-linux-gcc9.11"
+    # [string]$Target = "aarch64-oe-linux-gcc9.11"
+    [string]$Target = "aarch64-ubuntu-gcc7.5"
     # [string]$Target = "windows-x86_64"
 )
 
