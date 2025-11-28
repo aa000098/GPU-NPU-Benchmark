@@ -1,0 +1,1 @@
+/home/hyunho.son/Desktop/project/GPU-NPU-Benchmark/inputs/mha_input_0.raw
