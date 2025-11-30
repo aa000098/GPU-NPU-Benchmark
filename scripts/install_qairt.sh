@@ -7,8 +7,10 @@
 # - check-linux-dependency, envcheck까지 실행
 #########################################################
 
-VERSION="2.40.0.251030"
-ZIP_NAME="${VERSION}.zip"
+#VERSION="2.40.0.251030"
+VERSION="2.22.6.240515"
+#ZIP_NAME="v${VERSION}.zip"
+ZIP_NAME="v${VERSION}"
 URL="https://softwarecenter.qualcomm.com/api/download/software/sdks/Qualcomm_AI_Runtime_Community/All/${VERSION}/${ZIP_NAME}"
 
 INSTALL_BASE="$HOME/install_files"
