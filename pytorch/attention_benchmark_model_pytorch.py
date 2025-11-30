@@ -30,5 +30,5 @@ if __name__ == "__main__":
         input_names=["input"],
         output_names=["output"],
         opset_version=18,
-        dynamic_axes={"input": {0: "B", 1: "T"}, "output": {0: "B", 1: "T"}},
+        # dynamic_axes={"input": {0: "B", 1: "T"}, "output": {0: "B", 1: "T"}},
     )
