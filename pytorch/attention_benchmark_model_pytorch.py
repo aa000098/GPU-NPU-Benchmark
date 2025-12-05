@@ -5,7 +5,6 @@ import torch.nn as nn
 class MHAModel(nn.Module):
     def __init__(self, d_model=512, n_heads=8):
         super().__init__()
-
         self.mha = nn.MultiheadAttention(embed_dim=d_model, num_heads=n_heads, batch_first=True)
 
     def forward(self, x):
@@ -21,6 +20,8 @@ if __name__ == "__main__":
     d_model = 512
 
     model = MHAModel(d_model=d_model, n_heads=8)
+    model.eval()
+
     x = torch.randn(batch_size, seq_length, d_model)
 
     torch.onnx.export(
@@ -29,6 +30,6 @@ if __name__ == "__main__":
         "mha.onnx",
         input_names=["input"],
         output_names=["output"],
-        opset_version=18,
+        opset_version=13,
         # dynamic_axes={"input": {0: "B", 1: "T"}, "output": {0: "B", 1: "T"}},
     )
