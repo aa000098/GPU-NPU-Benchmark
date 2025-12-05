@@ -9,11 +9,16 @@ PROJECT=$HOME/Desktop/project/GPU-NPU-Benchmark
 MODELS=$PROJECT/models
 OUTPUT=$PROJECT/output
 
+QNN_ROOT="$QNN_SDK_ROOT"
+TOOL_NAME="qnn-model-lib-generator"
+TOOL_PATH="$QNN_ROOT/bin/$TOOL_NAME"
+
 MODEL_FILE="$MODELS/mha_qnn.cpp"
 BIN_FILE="$MODELS/mha_qnn.bin"
 OUT_DIR="$OUTPUT/mha_htp_lib"
 BACKEND="htp"
-TARGET="x86_64-linux-clang"
+#TARGET="x86_64-linux-clang"
+TARGET="aarch64-oe-linux-gcc11.2"
 
 # QNN SDK 환경 확인
 if [[ -z "$QNN_SDK_ROOT" ]]; then
@@ -43,7 +48,7 @@ fi
 
 # 모델 라이브러리 생성
 echo "[INFO] Building QNN HTP model..."
-qnn-model-lib-generator \
+python $TOOL_PATH \
     -c "$MODEL_FILE" \
     -b "$BIN_FILE" \
     -o "$OUT_DIR" \
