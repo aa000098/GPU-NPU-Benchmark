@@ -1,3 +1,0 @@
-/home/hyunho.son/Desktop/project/GPU-NPU-Benchmark/acl/build/CMakeFiles/matmul_acl.dir
-/home/hyunho.son/Desktop/project/GPU-NPU-Benchmark/acl/build/CMakeFiles/edit_cache.dir
-/home/hyunho.son/Desktop/project/GPU-NPU-Benchmark/acl/build/CMakeFiles/rebuild_cache.dir
