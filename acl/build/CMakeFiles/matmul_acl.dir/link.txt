@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -shared -Wl,-soname,libmatmul_acl.so -o libmatmul_acl.so CMakeFiles/matmul_acl.dir/matmul_acl.cpp.o   -L/home/hyunho.son/install_files/ComputeLibrary/build  -Wl,-rpath,/home/hyunho.son/install_files/ComputeLibrary/build -larm_compute -lOpenCL 
