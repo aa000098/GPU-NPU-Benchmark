@@ -2,38 +2,175 @@ import ctypes
 import os
 import time
 
+import numpy as np
+
 # ACL shared library 경로
 HERE = os.path.dirname(os.path.abspath(__file__))
-MATMUL_ACL_PATH = os.path.join(HERE, "build/libmatmul_acl.so")
+MATMUL_ACL_PATH = os.path.join(HERE, "build/libmatmul_acl_f16.so")
 
-_acl = ctypes.CDLL(MATMUL_ACL_PATH)
 #_acl.acl_gemm_fp16.argtypes = (ctypes.c_int, ctypes.c_int, ctypes.c_int)
 #_acl.acl_gemm_fp16.restype  = ctypes.c_int
 
-def matmul_acl(M, N, K):
+'''
+def matmul_acl_f16(X, W):
     """
     Arm Compute Library(CL GEMM)을 사용한 matmul.
     시간 측정은 Python에서 수행.
     """
 
+    _acl = ctypes.CDLL(MATMUL_ACL_PATH)
+
+    _acl.matmul_acl_f16.argtypes = [
+        ctypes.c_int,  # M
+        ctypes.c_int,  # N
+        ctypes.c_int,  # K
+        ctypes.POINTER(ctypes.c_uint16),  # A
+        ctypes.POINTER(ctypes.c_uint16),  # B
+        ctypes.POINTER(ctypes.c_uint16),  # C
+    ]
+    _acl.matmul_acl_f16.restype = ctypes.c_int
+
     iters = 50
 
     # optional: warm-up
     for _ in range(5):
-        ret = _acl.matmul_acl(M, N, K)
+        ret = _acl.matmul_acl_f16(M, N, K, A, B)
         if ret != 0:
-            raise RuntimeError(f"matmul_acl failed with code {ret}")
+            raise RuntimeError(f"matmul_acl_f16 failed with code {ret}")
 
     start = time.time()
     for _ in range(iters):
-        ret = _acl.matmul_acl(M, N, K)
+        ret = _acl.matmul_acl_f16(M, N, K, A, B)
         if ret != 0:
-            raise RuntimeError(f"matmul_acl failed with code {ret}")
+            raise RuntimeError(f"matmul_acl_f16 failed with code {ret}")
     end = time.time()
 
     latency_ms = (end - start) * 1000.0 / iters
 
     return latency_ms
 
-if __name__=="__main__":
-    matmul_acl(32, 32, 32)
+'''
+
+def matmul_acl_f16(X, W, iters=50):
+    """
+    ACL(CL GEMM, FP16)을 사용한 matmul.
+    - X: np.ndarray, shape [M, K], dtype float16/float32
+    - W: np.ndarray, shape [K, N], dtype float16/float32
+
+    return:
+        latency_ms, C (np.float16, [M, N])    if return_output=True
+        latency_ms                            if return_output=False
+    """
+    _acl = ctypes.CDLL(MATMUL_ACL_PATH)
+
+    _acl.matmul_acl_f16.argtypes = [
+        ctypes.c_int,  # M
+        ctypes.c_int,  # N
+        ctypes.c_int,  # K
+        ctypes.POINTER(ctypes.c_uint16),  # A
+        ctypes.POINTER(ctypes.c_uint16),  # B
+        ctypes.POINTER(ctypes.c_uint16),  # C
+    ]
+    _acl.matmul_acl_f16.restype = ctypes.c_int
+
+    X = np.asarray(X, dtype=np.float16, order="C")
+    W = np.asarray(W, dtype=np.float16, order="C")
+
+    if X.ndim != 2 or W.ndim != 2:
+        raise ValueError("X, W must be 2D")
+
+    M, K1 = X.shape
+    K2, N = W.shape
+    if K1 != K2:
+        raise ValueError(f"shape mismatch: X ({M},{K1}), W ({K2},{N})")
+
+    # FP16 → uint16 비트패턴 뷰
+    X_u16 = X.view(np.uint16)
+    W_u16 = W.view(np.uint16)
+    C = np.empty((M, N), dtype=np.float16)
+    C_u16 = C.view(np.uint16)
+
+    a_ptr = X_u16.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
+    b_ptr = W_u16.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
+    c_ptr = C_u16.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
+
+    # warm-up
+    for _ in range(5):
+        ret = _acl.matmul_acl_f16(M, N, K1, a_ptr, b_ptr, c_ptr)
+        if ret != 0:
+            raise RuntimeError(f"matmul_acl_f16 failed in warmup, code={ret}")
+
+    # 측정
+    start = time.time()
+    for _ in range(iters):
+        ret = _acl.matmul_acl_f16(M, N, K1, a_ptr, b_ptr, c_ptr)
+        if ret != 0:
+            raise RuntimeError(f"matmul_acl_f16 failed in loop, code={ret}")
+    end = time.time()
+
+    latency_ms = (end - start) * 1000.0 / iters
+
+    return latency_ms, C.copy()
+
+
+def matmul_acl_int8(X, W, iters=50):
+    """
+    ACL(CL GEMM, INT8)을 사용한 matmul.
+    - X: np.ndarray, shape [M, K], dtype int8
+    - W: np.ndarray, shape [K, N], dtype int8
+
+    return:
+        latency_ms, C (np.int32, [M, N])    if return_output=True
+        latency_ms                            if return_output=False
+    """
+    _acl = ctypes.CDLL(MATMUL_ACL_PATH)
+
+    _acl.matmul_acl_int8.argtypes = [
+        ctypes.c_int,  # M
+        ctypes.c_int,  # N
+        ctypes.c_int,  # K
+        ctypes.POINTER(ctypes.c_int8),  # A
+        ctypes.POINTER(ctypes.c_int8),  # B
+        ctypes.POINTER(ctypes.c_int32),  # C
+    ]
+    _acl.matmul_acl_int8.restype = ctypes.c_int
+
+
+
+    X = np.asarray(X, dtype=np.int8, order="C")
+    W = np.asarray(W, dtype=np.int8, order="C")
+
+    if X.ndim != 2 or W.ndim != 2:
+        raise ValueError("X, W must be 2D")
+
+    M, K1 = X.shape
+    K2, N = W.shape
+    if K1 != K2:
+        raise ValueError(f"shape mismatch: X ({M},{K1}), W ({K2},{N})")
+
+    C = np.empty((M, N), dtype=np.int32)
+
+    a_ptr = X.ctypes.data_as(ctypes.POINTER(ctypes.c_int8))
+    b_ptr = W.ctypes.data_as(ctypes.POINTER(ctypes.c_int8))
+    c_ptr = C.ctypes.data_as(ctypes.POINTER(ctypes.c_int32))
+
+
+    # warm-up
+    for _ in range(5):
+        ret = _acl.matmul_acl_f16(M, N, K1, a_ptr, b_ptr, c_ptr)
+        if ret != 0:
+            raise RuntimeError(f"matmul_acl_f16 failed in warmup, code={ret}")
+
+    # 측정
+    start = time.time()
+    for _ in range(iters):
+        ret = _acl.matmul_acl_f16(M, N, K1, a_ptr, b_ptr, c_ptr)
+        if ret != 0:
+            raise RuntimeError(f"matmul_acl_f16 failed in loop, code={ret}")
+    end = time.time()
+
+    latency_ms = (end - start) * 1000.0 / iters
+
+    return latency_ms, C.copy()
+
+

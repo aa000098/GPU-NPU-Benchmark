@@ -15,9 +15,9 @@ link_directories(
     ${ACL_ROOT}/build
 )
 
-add_library(matmul_acl SHARED matmul_acl.cpp)
+add_library(matmul_acl_f16 SHARED matmul_acl_f16.cpp)
 
-target_link_libraries(matmul_acl
+target_link_libraries(matmul_acl_f16
     arm_compute
     #    arm_compute_core
     OpenCL

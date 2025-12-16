@@ -1,4 +1,5 @@
-# rknn/matmul_rknn.py
+# my_rknn/matmul_rknn.py
+
 import os
 import time
 import numpy as np
@@ -26,11 +27,45 @@ def generate_matmul_onnx(K, M, N):
     onnx.save(model, onnx_path)
     return onnx_path
 
-def get_rknn_path(M, N, K):
-    return os.path.join(HERE, f"matmul_M{M}_N{N}_K{K}.rknn")
+def get_rknn_path(M, N, K, quant=False):
+    suffix = "int8" if quant else "fp16"
+    return os.path.join(HERE, f"matmul_M{M}_N{N}_K{K}_{suffix}.rknn")
 
-def build_matmul_rknn(M, N, K):
-    rknn_path = get_rknn_path(M, N, K)
+
+def build_dummy_dataset(M, N, K, num_samples=32):
+    """
+    MatMul용 dummy calibration dataset 생성
+    각 줄:  A_i.npy B_i.npy
+    """
+    dataset_dir = os.path.join(HERE, f"matmul_calib_M{M}_N{N}_K{K}")
+    os.makedirs(dataset_dir, exist_ok=True)
+
+    dataset_txt = os.path.join(dataset_dir, "dataset.txt")
+    if os.path.exists(dataset_txt):
+        # 이미 만들어져 있으면 재사용
+        return dataset_txt
+
+    lines = []
+    for i in range(num_samples):
+        A = np.random.rand(M, K).astype(np.float32)
+        B = np.random.rand(K, N).astype(np.float32)
+
+        a_path = os.path.join(dataset_dir, f"A_{i}.npy")
+        b_path = os.path.join(dataset_dir, f"B_{i}.npy")
+        np.save(a_path, A)
+        np.save(b_path, B)
+
+        # 여러 입력인 경우 "a.npy b.npy" 형식으로 한 줄에 써야 함
+        lines.append(f"{a_path} {b_path}\n")
+
+    with open(dataset_txt, "w") as f:
+        f.writelines(lines)
+
+    return dataset_txt
+
+
+def build_matmul_rknn(M, N, K, quant=False):
+    rknn_path = get_rknn_path(M, N, K, quant=quant)
 
     if os.path.exists(rknn_path):
         #print(">> use existing RKNN:", rknn_path)
@@ -55,8 +90,16 @@ def build_matmul_rknn(M, N, K):
     if ret != 0:
         raise RuntimeError(f"RKNN load_onnx failed: {ret}")
 
-    print(">> build RKNN (FP32/FP16, no quant)")
-    ret = rknn.build(do_quantization=False)
+    if quant:
+        # INT8 quantization: generate dummy dataset
+        dataset_txt = build_dummy_dataset(M, N, K)
+        print(">> build RKNN INT8")
+        ret = rknn.build(do_quantization=True, dataset=dataset_txt)
+    else:
+        # FP16 경로: do_quantization=False (Rockchip 문서 기준 float32→float16 변환만 수행)
+        print(">> build RKNN FP16")
+        ret = rknn.build(do_quantization=False)
+
     if ret != 0:
         raise RuntimeError(f"RKNN build failed: {ret}")
 
@@ -69,41 +112,107 @@ def build_matmul_rknn(M, N, K):
     return rknn_path
 
 
-def matmul_rknn(M, N, K, iters=30):
+def matmul_rknn_f16(X, W, iters=30):
+    """
+    RKNN(FP16 내부) MatMul
+    - X: [M, K], float32/float16
+    - W: [K, N], float32/float16
 
-    rknn_path = build_matmul_rknn(M, N, K)
+    return:
+        (C, latency_ms)  if return_output=True
+        latency_ms       if return_output=False
+    """
+    X = np.asarray(X, dtype=np.float32, order="C")
+    W = np.asarray(W, dtype=np.float32, order="C")
+
+    if X.ndim != 2 or W.ndim != 2:
+        raise ValueError("X, W must be 2D")
+
+    M, K1 = X.shape
+    K2, N = W.shape
+    if K1 != K2:
+        raise ValueError(f"shape mismatch: X ({M},{K1}), W ({K2},{N})")
+
+    rknn_path = build_matmul_rknn(M, N, K1, quant=False)
 
     rknn = RKNN()
-    rknn.load_rknn(rknn_path)
+    ret = rknn.load_rknn(rknn_path)
+    if ret != 0:
+        raise RuntimeError(f"load_rknn failed: {ret}")
 
-    print(">> init runtime")
-    # target 지정 안 해도 보드에서 돌면 알아서 rk3588로 잡히는 경우가 많음
     ret = rknn.init_runtime(target="rk3588")
     if ret != 0:
-        raise RuntimeError(f"RKNN init_runtime failed: {ret}")
+        raise RuntimeError(f"init_runtime failed: {ret}")
 
-    # 2) 입력 데이터 준비
-    A = np.random.rand(M, K).astype(np.float32)
-    B = np.random.rand(K, N).astype(np.float32)
+    last_out = None
 
-    # 3) warm-up
+    # warm-up
     for _ in range(3):
-        outputs = rknn.inference(
-            inputs=[A, B], 
-            data_format=['nhwc', 'nhwc']
-        )
+        outputs = rknn.inference(inputs=[X, W])
+        last_out = outputs[0]
 
-    # 4) 측정
+    # benchmark
     start = time.time()
     for _ in range(iters):
-        outputs = rknn.inference(
-            inputs=[A, B], 
-            data_format=['nhwc', 'nhwc']
-        )
+        outputs = rknn.inference(inputs=[X, W])
+        last_out = outputs[0]
     end = time.time()
 
     rknn.release()
 
-    latency_ms = (end - start) * 1000 / iters
-    return latency_ms
+    latency_ms = (end - start) * 1000.0 / iters
+    C = np.array(last_out)  # RKNN output -> numpy
 
+    return latency_ms, C
+
+
+def matmul_rknn_int8(X, W, iters=30):
+    """
+    RKNN(INT8 quantized) MatMul
+    - X: [M, K], float32 (또는 float16)
+    - W: [K, N], float32 (또는 float16)
+
+    RKNN은 내부에서 INT8 quant/dequant 수행, Python 단에서는 float32만 던져주면 됨.
+    """
+    X = np.asarray(X, dtype=np.float32, order="C")
+    W = np.asarray(W, dtype=np.float32, order="C")
+
+    if X.ndim != 2 or W.ndim != 2:
+        raise ValueError("X, W must be 2D")
+
+    M, K1 = X.shape
+    K2, N = W.shape
+    if K1 != K2:
+        raise ValueError(f"shape mismatch: X ({M},{K1}), W ({K2},{N})")
+
+    rknn_path = build_matmul_rknn(M, N, K1, quant=True)
+
+    rknn = RKNN()
+    ret = rknn.load_rknn(rknn_path)
+    if ret != 0:
+        raise RuntimeError(f"load_rknn failed: {ret}")
+
+    ret = rknn.init_runtime(target="rk3588")
+    if ret != 0:
+        raise RuntimeError(f"init_runtime failed: {ret}")
+
+    last_out = None
+
+    # warm-up
+    for _ in range(3):
+        outputs = rknn.inference(inputs=[X, W])
+        last_out = outputs[0]
+
+    # benchmark
+    start = time.time()
+    for _ in range(iters):
+        outputs = rknn.inference(inputs=[X, W])
+        last_out = outputs[0]
+    end = time.time()
+
+    rknn.release()
+
+    latency_ms = (end - start) * 1000.0 / iters
+    C = np.array(last_out)
+
+    return latency_ms, C
