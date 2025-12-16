@@ -97,7 +97,7 @@ def profile_attention(seq=32, head_dim=64):
     print("Y_ref: \n", Y_ref)
     print("Y_gpu: \n", Y_gpu)
     print("Y_npu: \n", Y_npu)
-    
+
 
 if __name__ == "__main__":
     # 사용 예:
