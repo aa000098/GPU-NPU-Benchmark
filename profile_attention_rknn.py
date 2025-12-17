@@ -9,6 +9,7 @@ from opencl.softmax_opencl import softmax_opencl
 
 # GPU(ACL CLGEMM matmul)
 from acl.matmul_acl import matmul_acl_f16, matmul_acl_int8 
+from acl.softmax_acl import softmax_acl_f16
 
 # NPU(RKNN)
 from my_rknn.matmul_rknn import matmul_rknn_f16, matmul_rknn_int8
@@ -53,9 +54,8 @@ def profile_attention(seq=32, head_dim=64):
 
     qk_lat_gpu, QK = matmul_acl_f16(Q, K_mat.T)
 
-    # softmax는 기존 OpenCL 커널 그대로 사용 (latency만)
-    sm_lat_gpu = softmax_opencl(M, M)
-    P  = softmax_np(QK * scale, axis=-1)
+    P = softmax_np(QK * scale, axis=-1)  # numpy 버전으로 우선
+    sm_lat_gpu, _ = softmax_acl_f16(X=QK*scale, beta=1, axis=0)  # ACL 버전 latency 측정
 
     av_lat_gpu, Y_gpu = matmul_acl_f16(P, V)
     maxdiff_y_gpu = np.max(np.abs(Y_gpu - Y_ref))

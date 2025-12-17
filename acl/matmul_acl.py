@@ -8,48 +8,6 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 MATMUL_ACL_PATH = os.path.join(HERE, "build/libmatmul_acl_f16.so")
 
-#_acl.acl_gemm_fp16.argtypes = (ctypes.c_int, ctypes.c_int, ctypes.c_int)
-#_acl.acl_gemm_fp16.restype  = ctypes.c_int
-
-'''
-def matmul_acl_f16(X, W):
-    """
-    Arm Compute Library(CL GEMM)을 사용한 matmul.
-    시간 측정은 Python에서 수행.
-    """
-
-    _acl = ctypes.CDLL(MATMUL_ACL_PATH)
-
-    _acl.matmul_acl_f16.argtypes = [
-        ctypes.c_int,  # M
-        ctypes.c_int,  # N
-        ctypes.c_int,  # K
-        ctypes.POINTER(ctypes.c_uint16),  # A
-        ctypes.POINTER(ctypes.c_uint16),  # B
-        ctypes.POINTER(ctypes.c_uint16),  # C
-    ]
-    _acl.matmul_acl_f16.restype = ctypes.c_int
-
-    iters = 50
-
-    # optional: warm-up
-    for _ in range(5):
-        ret = _acl.matmul_acl_f16(M, N, K, A, B)
-        if ret != 0:
-            raise RuntimeError(f"matmul_acl_f16 failed with code {ret}")
-
-    start = time.time()
-    for _ in range(iters):
-        ret = _acl.matmul_acl_f16(M, N, K, A, B)
-        if ret != 0:
-            raise RuntimeError(f"matmul_acl_f16 failed with code {ret}")
-    end = time.time()
-
-    latency_ms = (end - start) * 1000.0 / iters
-
-    return latency_ms
-
-'''
 
 def matmul_acl_f16(X, W, iters=50):
     """
