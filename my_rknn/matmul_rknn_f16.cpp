@@ -48,6 +48,64 @@ static void pack_B_rk3588_f16_native(
     }
 }
 
+template <typename Ti, typename To>
+void norm_layout_to_perf_layout(Ti *src, To *dst, int32_t M, int32_t K, int32_t subK, bool isInt4Type)
+{
+    int outter_size = (int)std::ceil(K * 1.0f / subK);
+    for (int i = 0; i < outter_size; i++)
+    {
+        for (int m = 0; m < M; m++)
+        {
+            for (int j = 0; j < subK; j++)
+            {
+                int ki = i * subK + j;
+                if (isInt4Type)
+                {
+                    int input_index = m * K + ki;
+                    int output_index = i * M * subK + m * subK + j;
+                    int8_t int4 = src[input_index];
+                    if (ki >= K)
+                    {
+                        int4 = 0;
+                    }
+                    else
+                    {
+                        int4 = int4 & 0xf;
+                    }
+                    if (output_index % 2 == 0)
+                    {
+                        dst[output_index / 2] = int4;
+                    }
+                    else
+                    {
+                        int8_t temp = dst[output_index / 2];
+                        int8_t result = temp | (int4 << 4);
+                        dst[output_index / 2] = result;
+                    }
+                }
+                else
+                {
+                    if (ki >= K)
+                    {
+                        dst[i * M * subK + m * subK + j] = 0;
+                    }
+                    else
+                    {
+                        dst[i * M * subK + m * subK + j] = src[m * K + ki];
+                    }
+                }
+            }
+        }
+    }
+}
+
+template void norm_layout_to_perf_layout<int8_t, int8_t>(int8_t *src, int8_t *dst, int32_t M, int32_t K, int32_t subK,
+                                                         bool isInt4Type);
+template void norm_layout_to_perf_layout<float16, float16>(float16 *src, float16 *dst, int32_t M, int32_t K,
+                                                               int32_t subK, bool isInt4Type);
+
+
+
 // C packed (N/4, M, 4) -> normal [M,N]
 static void unpack_C_rk3588_fp32_ac1(
     const float* Cp, int M, int N,
@@ -97,7 +155,7 @@ void* matmul_rknn_f16_create(int M, int K, int N, int core_mask) {
     info.N = h->Np;
     info.type = RKNN_FLOAT16_MM_FLOAT16_TO_FLOAT32;
     info.B_layout = 1;   // packed B
-    info.AC_layout = 0;  // packed A/C (matches demo behavior)
+    info.AC_layout = 1;  // packed A/C (matches demo behavior)
 
     memset(&h->io_attr, 0, sizeof(h->io_attr));
 
