@@ -8,3 +8,5 @@ venv
 *.rknn
 
 build
+logs
+tags
