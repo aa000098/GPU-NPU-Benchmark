@@ -8,7 +8,7 @@ import numpy as np
 # from opencl.softmax_opencl import softmax_opencl
 
 # GPU(ACL CLGEMM matmul)
-from acl.matmul_acl import matmul_acl_f16, matmul_acl_int8 
+from acl.matmul_acl import matmul_acl_f16
 from acl.softmax_acl import softmax_acl_f16
 
 # NPU(RKNN)
@@ -70,18 +70,29 @@ def profile_attention(seq=32, head_dim=64):
     print("\n=== NPU (RKNN FP16, RK3588) ===")
 
     # RKNN 쪽은 IO float32로 던지고 내부에서 FP16
-    qkv_lat_npu, QKV = matmul_rknn_f16(X, W_qkv)
-    #qkv_lat_npu, QKV_T = matmul_rknn_f16(W_qkv.T, X.T)  # RKNN matmul은 (N, K)x(K, M)에서 더 높은 성능
+    if M < D:
+        qkv_lat_npu, QKV = matmul_rknn_f16(X, W_qkv)
+    else:
+        qkv_lat_npu, QKV_T = matmul_rknn_f16(W_qkv.T, X.T)  # RKNN matmul은 (N, K)x(K, M)에서 더 높은 성능
+        QKV = QKV_T.T
     Q, K_mat, V = np.split(QKV.astype(np.float32), 3, axis=1)
     #Q, K_mat, V = np.split(QKV_T.T.astype(np.float32), 3, axis=1)
 
-    qk_lat_npu, QK = matmul_rknn_f16(Q, K_mat.T)
+    if M < D:
+        qk_lat_npu, QK = matmul_rknn_f16(Q, K_mat.T)
+    else:
+        qk_lat_npu, QK_T = matmul_rknn_f16(K_mat, Q.T)
+        QK = QK_T.T
 
     sm_lat_npu = softmax_rknn(M, M)  # 현재는 latency만
     P  = softmax_np(QK * scale, axis=-1)
 
-    av_lat_npu, Y_npu  = matmul_rknn_f16(P, V)
-    maxdiff_y_npu = np.max(np.abs(Y_gpu - Y_ref))
+    if M < D: 
+        av_lat_npu, Y_npu  = matmul_rknn_f16(P, V)
+    else:
+        av_lat_npu, Y_npu  = matmul_rknn_f16(V.T, P.T)
+        Y_npu = Y_npu.T
+    maxdiff_y_npu = np.max(np.abs(Y_npu - Y_ref))
 
     print(f"QKV (NPU): {qkv_lat_npu:.3f} ms")
     print(f"QKᵀ (NPU): {qk_lat_npu:.3f} ms")
@@ -107,7 +118,7 @@ if __name__ == "__main__":
     #   python profile_attention.py 128 64   -> seq=128, head_dim=64
     if len(sys.argv) == 1:
         seq = 2048
-        head_dim = 2048
+        head_dim = 64
     elif len(sys.argv) == 3:
         seq = int(sys.argv[1])
         head_dim = int(sys.argv[2])
