@@ -2,6 +2,9 @@
 #include <string.h>
 #include <vector>
 #include <algorithm>
+#include <cmath>
+
+#include <stdio.h>
 
 #include "rknn_matmul_api.h"
 
@@ -21,6 +24,24 @@ static void pack_A_rk3588_f16_ac1(
                 if (k < K) v = A[m * K + k];
                 Ap[((kb * M + m) * 8) + ki] = v;
             }
+        }
+    }
+}
+
+
+static void pack_B_rk3588_f16_native_v2(
+    const uint16_t* B, int K, int N,
+    uint16_t* Bp, int Kp, int Np
+) {
+    memset(Bp, 0, Kp * Np * sizeof(uint16_t));
+    for (int n = 0; n < N; ++n) {
+        for (int k = 0; k < K; ++k) {
+            const int b_n = n / 16;
+            const int i_n = n % 16;
+            const int b_k = k / 32;
+            const int i_k = k % 32;
+            const int idx = (((b_n * (Kp / 32) + b_k) * 16 + i_n) * 32 + i_k);
+            Bp[idx] = B[k * N + n];
         }
     }
 }
@@ -99,10 +120,8 @@ void norm_layout_to_perf_layout(Ti *src, To *dst, int32_t M, int32_t K, int32_t 
     }
 }
 
-template void norm_layout_to_perf_layout<int8_t, int8_t>(int8_t *src, int8_t *dst, int32_t M, int32_t K, int32_t subK,
-                                                         bool isInt4Type);
-template void norm_layout_to_perf_layout<float16, float16>(float16 *src, float16 *dst, int32_t M, int32_t K,
-                                                               int32_t subK, bool isInt4Type);
+//template void norm_layout_to_perf_layout<int8_t, int8_t>(int8_t *src, int8_t *dst, int32_t M, int32_t K, int32_t subK, bool isInt4Type);
+//template void norm_layout_to_perf_layout<float16, float16>(float16 *src, float16 *dst, int32_t M, int32_t K, int32_t subK, bool isInt4Type);
 
 
 
@@ -140,7 +159,7 @@ struct MatmulHandleF16 {
 extern "C" {
 
 // create handle for fixed (M,K,N)
-void* matmul_rknn_f16_create(int M, int K, int N, int core_mask) {
+void* matmul_rknn_f16_create(int M, int K, int N, int core_mask=RKNN_NPU_CORE_ALL) {
     if (M <= 0 || K <= 0 || N <= 0) return nullptr;
 
     auto* h = new MatmulHandleF16();
@@ -154,8 +173,8 @@ void* matmul_rknn_f16_create(int M, int K, int N, int core_mask) {
     info.K = h->Kp;
     info.N = h->Np;
     info.type = RKNN_FLOAT16_MM_FLOAT16_TO_FLOAT32;
-    info.B_layout = 1;   // packed B
-    info.AC_layout = 1;  // packed A/C (matches demo behavior)
+    info.B_layout = 0;   // packed B
+    info.AC_layout = 0;  // packed A/C (matches demo behavior)
 
     memset(&h->io_attr, 0, sizeof(h->io_attr));
 
@@ -189,7 +208,8 @@ int matmul_rknn_f16_set_B(void* handle, const uint16_t* W) {
     auto* h = (MatmulHandleF16*)handle;
 
     uint16_t* Bdst = (uint16_t*)h->memB->virt_addr;
-    pack_B_rk3588_f16_native(W, h->K, h->N, Bdst, h->Kp, h->Np);
+    pack_B_rk3588_f16_native_v2(W, h->K, h->N, Bdst, h->Kp, h->Np);
+    //memcpy(h->memB->virt_addr, W, h->K * h->N * sizeof(uint16_t));
 
     h->b_ready = true;
     return 0;
@@ -199,18 +219,20 @@ int matmul_rknn_f16_set_B(void* handle, const uint16_t* W) {
 int matmul_rknn_f16_run(void* handle, const uint16_t* X, float* C_out) {
     if (!handle || !X || !C_out) return -1;
     auto* h = (MatmulHandleF16*)handle;
-    if (!h->b_ready) return -2; // call set_B first
+    //if (!h->b_ready) return -2; // call set_B first
 
     // pack A into memA
-    uint16_t* Adst = (uint16_t*)h->memA->virt_addr;
-    pack_A_rk3588_f16_ac1(X, h->M, h->K, Adst, h->Kp);
+    //uint16_t* Adst = (uint16_t*)h->memA->virt_addr;
+    //pack_A_rk3588_f16_ac1(X, h->M, h->K, Adst, h->Kp);
+    memcpy(h->memA->virt_addr, X, h->M * h->K * sizeof(uint16_t));
 
     int ret = rknn_matmul_run(h->ctx);
     if (ret != 0) return ret;
 
     // unpack C from memC
-    const float* Csrc = (const float*)h->memC->virt_addr;
-    unpack_C_rk3588_fp32_ac1(Csrc, h->M, h->N, C_out, h->Np);
+    //const float* Csrc = (const float*)h->memC->virt_addr;
+    //unpack_C_rk3588_fp32_ac1(Csrc, h->M, h->N, C_out, h->Np);
+    memcpy(C_out, h->memC->virt_addr, h->M * h->N * sizeof(float));
     return 0;
 }
 
@@ -228,7 +250,8 @@ void matmul_rknn_f16_destroy(void* handle) {
 
 int matmul_rknn_f16(int M, int N, int K, 
                 const uint16_t* X, const uint16_t* W,
-                float* C_out, int core_mask) {
+                float* C_out, int core_mask = RKNN_NPU_CORE_ALL) {
+    //printf("matmul_rknn_f16 M=%d N=%d K=%d core_mask=0x%X\n", M, N, K, core_mask);
     void* handle = matmul_rknn_f16_create(M, K, N, core_mask);
     if (!handle) return -1;
     int ret = matmul_rknn_f16_set_B(handle, W);

@@ -52,7 +52,12 @@ def build_softmax_rknn(L, D):
 
     rknn = RKNN()
 
-    ret = rknn.config(target_platform="rk3588")
+    ret = rknn.config(
+        target_platform="rk3588",
+        optimization_level=3,
+        quantized_dtype="float16",
+        target_ops_steps=0,
+    )
     if ret != 0:
         raise RuntimeError(f"RKNN config failed: {ret}")
 
