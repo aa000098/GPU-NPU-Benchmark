@@ -8,11 +8,110 @@
 
 using namespace arm_compute;
 
-extern "C"
+struct ACLMatmulHandle {
+    CLTensor A, B, C;
+    CLGEMM gemm;
+    int M, N, K;
+    bool b_ready = false;
+};
+
+
+extern "C" {
+
+void* matmul_acl_f16_create(int M, int N, int K) {
+    static bool env_initialized = false;
+    if (!env_initialized) {
+        CLScheduler::get().default_init();
+        env_initialized = true;
+    }
+
+    auto* h = new ACLMatmulHandle();
+    h->M = M; h->N = N; h->K = K;
+
+    // ACL TensorShape: (Width, Height) -> (K, M) 순서
+    const DataType dt = DataType::F16;
+    h->A.allocator()->init(TensorInfo(TensorShape(K, M), 1, dt));
+    h->B.allocator()->init(TensorInfo(TensorShape(N, K), 1, dt));
+    h->C.allocator()->init(TensorInfo(TensorShape(N, M), 1, DataType::F32));
+
+    // GEMM 설정 (커널 컴파일 및 최적화 경로 탐색)
+    h->gemm.configure(&h->A, &h->B, nullptr, &h->C, 1.0f, 0.0f, GEMMInfo());
+
+    // 실제 GPU 메모리 할당
+    h->A.allocator()->allocate();
+    h->B.allocator()->allocate();
+    h->C.allocator()->allocate();
+
+    return (void*)h;
+}
+
+int matmul_acl_f16_set_B(void* handle, const uint16_t* hB) {
+    if (!handle || !hB) return -1;
+    auto* h = (ACLMatmulHandle*)handle;
+
+    h->B.map(true);
+    std::memcpy(h->B.buffer(), hB, sizeof(uint16_t) * h->K * h->N);
+    h->B.unmap();
+    
+    h->b_ready = true;
+    return 0;
+}
+
+int matmul_acl_f16_run(void* handle, const uint16_t* hA, float* hC) {
+    if (!handle || !hA || !hC) return -1;
+    auto* h = (ACLMatmulHandle*)handle;
+
+    if (!h->b_ready) {
+        // B 행렬이 설정되지 않음
+        return -2;
+    }
+
+    // A 행렬 복사
+    h->A.map(true);
+    std::memcpy(h->A.buffer(), hA, sizeof(uint16_t) * h->M * h->K);
+    h->A.unmap();
+
+    // GEMM 실행
+    h->gemm.run();
+    CLScheduler::get().sync();
+
+    // C 행렬 복사
+    h->C.map(true);
+    std::memcpy(hC, h->C.buffer(), sizeof(float) * h->M * h->N);
+    h->C.unmap();
+
+    return 0;
+}
+
+void matmul_acl_f16_destroy(void* handle) {
+    if (!handle) return;
+    auto* h = (ACLMatmulHandle*)handle;
+    delete h;
+}
+
 int matmul_acl_f16(int M, int N, int K,
                const uint16_t* hA,  // host A (FP16 비트패턴)
                const uint16_t* hB,  // host B
-               uint16_t* hC)        // host C (out)
+               float* hC)        // host C (out)
+{
+    void* handle = matmul_acl_f16_create(M, N, K);
+    if (!handle) return -1;
+
+    int ret = matmul_acl_f16_set_B(handle, hB);
+    if (ret != 0) {
+        matmul_acl_f16_destroy(handle);
+        return ret;
+    }
+
+    ret = matmul_acl_f16_run(handle, hA, hC);
+    matmul_acl_f16_destroy(handle);
+    return ret;
+}
+
+int matmul_acl_f16_old(int M, int N, int K,
+               const uint16_t* hA,  // host A (FP16 비트패턴)
+               const uint16_t* hB,  // host B
+               float* hC)        // host C (out)
 {
     static bool initialized = false;
     if (!initialized) {
@@ -60,9 +159,10 @@ int matmul_acl_f16(int M, int N, int K,
 
     // -------- Device → Host copy --------
     C.map(true);
-    std::memcpy(hC, C.buffer(), sizeof(uint16_t) * M * N);
+    std::memcpy(hC, C.buffer(), sizeof(float) * M * N);
     C.unmap();
 
     return 0;
 }
 
+} // extern "C"
