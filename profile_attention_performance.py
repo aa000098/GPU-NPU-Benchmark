@@ -113,7 +113,7 @@ def profile_attention(seq=32, head_dim=64):
 #    print("Y_gpu: \n", Y_gpu)
 #    print("Y_npu: \n", Y_npu)
 
- 
+
 if __name__ == "__main__":
     # 사용 예:
     #   python profile_attention.py           -> 기본값 seq=640, head_dim=320
