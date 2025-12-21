@@ -80,7 +80,7 @@ def matmul_rknn_f16(X, W, iters=30):
     # 5: npu core1+core3,
     # 6: npu core2+core3,
     # 7: npu core1+core2+core3
-    core_mask = 7 
+    core_mask = 0 
 
     if X.ndim != 2 or W.ndim != 2:
         raise ValueError("X, W must be 2D")
