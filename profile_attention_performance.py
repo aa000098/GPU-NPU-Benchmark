@@ -119,8 +119,8 @@ if __name__ == "__main__":
     #   python profile_attention.py           -> 기본값 seq=640, head_dim=320
     #   python profile_attention.py 128 64   -> seq=128, head_dim=64
     if len(sys.argv) == 1:
-        seq = 2048
-        head_dim = 512
+        seq = 1
+        head_dim = 2048
     elif len(sys.argv) == 3:
         seq = int(sys.argv[1])
         head_dim = int(sys.argv[2])
