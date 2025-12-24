@@ -26,13 +26,14 @@ include_directories(${RKNN_ROOT_PATH}/examples/3rdparty)
 set(CMAKE_INSTALL_RPATH "lib")
 
 # rknn_matmul_api_demo
-add_library(matmul_rknn_f16 SHARED
+add_library(matmul_rknn SHARED
   matmul_rknn_f16.cpp
+  matmul_rknn_i8.cpp
   #  src/rknn_matmul_api_demo.cpp
   #  src/matmul_utils.cpp
 )
 
-target_link_libraries(matmul_rknn_f16
+target_link_libraries(matmul_rknn
   ${RKNN_RT_LIB}
 )
 
