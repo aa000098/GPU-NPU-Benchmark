@@ -222,17 +222,17 @@ int matmul_rknn_f16_run(void* handle, const uint16_t* X, float* C_out) {
     //if (!h->b_ready) return -2; // call set_B first
 
     // pack A into memA
-    //uint16_t* Adst = (uint16_t*)h->memA->virt_addr;
-    //pack_A_rk3588_f16_ac1(X, h->M, h->K, Adst, h->Kp);
-    memcpy(h->memA->virt_addr, X, h->M * h->K * sizeof(uint16_t));
+    uint16_t* Adst = (uint16_t*)h->memA->virt_addr;
+    pack_A_rk3588_f16_ac1(X, h->M, h->K, Adst, h->Kp);
+    //memcpy(h->memA->virt_addr, X, h->M * h->K * sizeof(uint16_t));
 
     int ret = rknn_matmul_run(h->ctx);
     if (ret != 0) return ret;
 
     // unpack C from memC
-    //const float* Csrc = (const float*)h->memC->virt_addr;
-    //unpack_C_rk3588_fp32_ac1(Csrc, h->M, h->N, C_out, h->Np);
-    memcpy(C_out, h->memC->virt_addr, h->M * h->N * sizeof(float));
+    const float* Csrc = (const float*)h->memC->virt_addr;
+    unpack_C_rk3588_fp32_ac1(Csrc, h->M, h->N, C_out, h->Np);
+    //memcpy(C_out, h->memC->virt_addr, h->M * h->N * sizeof(float));
     return 0;
 }
 

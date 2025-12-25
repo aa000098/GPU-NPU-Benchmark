@@ -12,7 +12,7 @@ from acl.matmul_acl import matmul_acl_f16
 from acl.softmax_acl import softmax_acl_f16
 
 # NPU(RKNN)
-from my_rknn.matmul_rknn import matmul_rknn_f16
+from my_rknn.matmul_rknn import matmul_rknn_f16, matmul_rknn_i8
 from my_rknn.softmax_rknn import softmax_rknn
 
 def round_summary(s, nd=3):
@@ -113,6 +113,38 @@ def profile_attention(seq=32, head_dim=64):
 #    print("Y_gpu: \n", Y_gpu)
 #    print("Y_npu: \n", Y_npu)
 
+def profile_attention_i8(seq=32, head_dim=64):
+    M = seq
+    D = head_dim
+
+    X = np.random.randn(M, D).astype(np.float32) / np.sqrt(D)
+    W_qkv  = np.random.randn(D, D*3).astype(np.float32) / np.sqrt(D)
+    W_out = np.random.randn(M, D*3).astype(np.float32)
+
+    QKV_ref = X @ W_qkv                # [M, 3D]
+    Q_ref, K_ref, V_ref = np.split(QKV_ref, 3, axis=1)  # 각각 [M,D]
+
+    scale = 1.0 / np.sqrt(D)
+    QK_ref = Q_ref @ K_ref.T           # [M, M]
+    P_ref  = softmax_np(QK_ref * scale, axis=-1)
+    Y_ref = P_ref @ V_ref             # [M, D]
+
+    print()
+
+    print("\n=== NPU (RKNN INT8, RK3588) ===")
+    qkv_lat_npu, QKV = matmul_rknn_i8(X, W_qkv)
+    Q, K_mat, V = np.split(QKV.astype(np.float32), 3, axis=1)
+    qk_lat_npu, QK = matmul_rknn_i8(Q, K_mat.T)
+    sm_lat_npu = softmax_rknn(M, M)
+    P  = softmax_np(QK * scale, axis=-1)
+    av_lat_npu, Y_npu  = matmul_rknn_i8(P, V)
+    maxdiff_y_npu = np.max(np.abs(Y_npu - Y_ref))
+    print(f"QKV (NPU INT8): {qkv_lat_npu:.3f} ms")
+    print(f"QKᵀ (NPU INT8): {qk_lat_npu:.3f} ms")
+    print(f"softmax (NPU INT8): {sm_lat_npu:.3f} ms")
+    print(f"AV  (NPU INT8): {av_lat_npu:.3f} ms")
+    print(f"Y  max|diff| = {maxdiff_y_npu:.3e}")
+
 
 if __name__ == "__main__":
     # 사용 예:
@@ -129,3 +161,4 @@ if __name__ == "__main__":
         sys.exit(1)
 
     profile_attention(seq, head_dim)
+    profile_attention_i8(seq, head_dim)
