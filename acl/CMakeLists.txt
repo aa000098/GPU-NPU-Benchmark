@@ -28,10 +28,19 @@ target_link_libraries(acl_common INTERFACE
 )
 
 # --- shared libs ---
-add_library(matmul_acl_f16 SHARED matmul_acl_f16.cpp)
-add_library(matmul_acl_int8 SHARED matmul_acl_int8.cpp)
-add_library(softmax_acl_f16 SHARED softmax_acl_f16.cpp)
+add_library(matmul_acl SHARED 
+  matmul_acl_f16.cpp 
+  matmul_acl_i8.cpp
+)
+add_library(softmax_acl SHARED 
+  softmax_acl_f16.cpp
+  softmax_acl_i8.cpp
+)
+add_library(attention_acl SHARED 
+  attention_acl_f16.cpp
+  attention_acl_i8.cpp
+)
 
-target_link_libraries(matmul_acl_f16 PRIVATE acl_common)
-target_link_libraries(matmul_acl_int8 PRIVATE acl_common)
-target_link_libraries(softmax_acl_f16 PRIVATE acl_common)
+target_link_libraries(matmul_acl PRIVATE acl_common)
+target_link_libraries(softmax_acl PRIVATE acl_common)
+target_link_libraries(attention_acl PRIVATE acl_common)
