@@ -1,0 +1,138 @@
+import pandas as pd
+import os
+import sys
+from pycaret.classification import *
+
+# === 설정 ===
+HERE = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(HERE)
+CSV_PATH = os.path.join(PROJECT_ROOT, 'benchmark', 'attention_profile_data.csv')
+MODEL_NAME = 'backend_selector_pycaret'
+MODEL_SAVE_PATH = os.path.join(HERE, MODEL_NAME)
+
+def train_model():
+    """
+    CSV 데이터를 로드하여 PyCaret으로 분류 모델을 학습하고 저장합니다.
+    """
+    print(f"Script Location : {HERE}")
+    print(f"Target Data Path: {CSV_PATH}")
+
+    # 1. 파일 확인
+    if not os.path.exists(CSV_PATH):
+        print(f"\n[Error] CSV file not found at {CSV_PATH}")
+        sys.exit(1)
+
+    # 2. 데이터 로드
+    df = pd.read_csv(CSV_PATH)
+    print(f"Data Loaded: {df.shape}")
+
+    # 3. 데이터 전처리 (Data Leakage 방지)
+    # 학습에 쓰면 안 되는 정답지(Latency 등) 컬럼 제거
+    ignore_cols = [
+        'latency_gpu', 'latency_npu', 
+        'latency_gpu_fused', 'latency_npu_fused',
+        'gpu_qk', 'npu_qk', 'gpu_sm', 'npu_sm',
+        'gpu_qkv', 'npu_qkv', 'gpu_av', 'npu_av',
+        'speedup_ratio', 'min_latency', 'best_backend',
+        'best_backend_name' 
+    ]
+    cols_to_drop = [c for c in ignore_cols if c in df.columns]
+    df_train = df.drop(columns=cols_to_drop)
+
+    print("\n--- Training Features ---")
+    print(df_train.columns.tolist())
+    print("-" * 30)
+
+    # 4. PyCaret Setup
+    print("\n=== Setting up PyCaret ===")
+    exp_clf = setup(
+        data=df_train, 
+        target='best_device_class', 
+        session_id=42, 
+        normalize=True,
+        verbose=False, # 로그 줄임
+        html=False 
+    )
+
+    # 5. 모델 비교 및 선택
+    print("=== Comparing Models... ===")
+    best_model = compare_models(sort='Accuracy', n_select=1, turbo=True)
+    print(f"[Best Model]: {best_model}")
+
+    # 6. 튜닝 및 최종화
+    print("=== Tuning Model... ===")
+    tuned_model = tune_model(best_model, optimize='Accuracy')
+    final_model = finalize_model(tuned_model)
+
+    # 7. 저장
+    save_model(final_model, MODEL_SAVE_PATH)
+    print(f"\n[Success] Model saved to '{MODEL_SAVE_PATH}.pkl'")
+    
+    return final_model
+
+def predict_backend(n, d, is_int8=0, gpu_fused=0, npu_fused=0, model=None):
+    """
+    입력된 파라미터(N, D 등)를 기반으로 최적의 백엔드(GPU/NPU)를 예측합니다.
+    """
+    # 1. 모델 로드 (전달받지 않았으면 파일에서 로드)
+    if model is None:
+        try:
+            model = load_model(MODEL_SAVE_PATH)
+        except:
+            print("[Error] Model file not found. Please train first.")
+            return
+
+    # 2. 파생 변수(Feature) 계산 - 학습 데이터와 동일한 로직이어야 함
+    # (주의: flops, mem 공식은 벤치마크 때 쓴 것과 똑같아야 정확합니다)
+    flops_est = 2 * (4*n*d*d + 2*n*n*d) 
+    mem_est = (n*d + 3*d*d + 3*n*d + n*n + n*d) * 2 # FP16 기준 (2 bytes)
+    
+    # 입력 데이터프레임 생성
+    input_data = pd.DataFrame([{
+        'n': n, 
+        'd': d, 
+        'is_int8': is_int8,
+        'flops': flops_est,
+        'memory_bytes': mem_est,
+        'arithmetic_intensity': flops_est / (mem_est + 1e-9), # 0나누기 방지
+        'aspect_ratio': n / d,
+        'score_matrix_size': n * n, # (Note: 벤치마크 코드에선 n*n이었는지 n*d였는지 확인 필요. 여기선 n*n이 맞음)
+        'pad_overhead_n': 0, 
+        'pad_overhead_d': 0,
+        'gpu_attn_fused': gpu_fused, # 누락되었던 컬럼 추가
+        'npu_attn_fused': npu_fused  # 누락되었던 컬럼 추가
+    }])
+
+    # 3. 예측 수행
+    predictions = predict_model(model, data=input_data, verbose=False)
+
+    # 4. 결과 파싱
+    # PyCaret 버전에 따라 컬럼명이 다를 수 있음
+    pred_col = 'prediction_label' if 'prediction_label' in predictions.columns else 'Label'
+    score_col = 'prediction_score' if 'prediction_score' in predictions.columns else 'Score'
+
+    cls = predictions.iloc[0][pred_col]
+    score = predictions.iloc[0][score_col]
+    
+    device = "NPU" if cls == 1 else "GPU"
+    
+    return device, score
+
+if __name__ == "__main__":
+    # 1. 모델 학습
+    trained_model = train_model()
+
+    # 2. 추론 테스트 (함수 호출)
+    print("\n" + "="*30)
+    print("=== Inference Test ===")
+    print("="*30)
+
+    # 테스트 케이스 1: 작은 크기 -> NPU 예상
+    n, d = 128, 64
+    dev, conf = predict_backend(n, d, model=trained_model)
+    print(f"[Case 1] N={n}, D={d} -> Recommends: {dev} ({conf:.4f})")
+
+    # 테스트 케이스 2: 큰 크기 -> GPU 예상
+    n, d = 1, 2048
+    dev, conf = predict_backend(n, d, model=trained_model)
+    print(f"[Case 2] N={n}, D={d} -> Recommends: {dev} ({conf:.4f})")
