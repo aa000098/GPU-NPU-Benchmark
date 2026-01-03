@@ -1,0 +1,1 @@
+/home/hyunho.son/Desktop/project/GPU-NPU-Benchmark/my_rknn/dummy_data.npy
