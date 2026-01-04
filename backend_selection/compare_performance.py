@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import time
 from tqdm import tqdm
+
 from smart_attention_executor import SmartAttentionExecutor
 
 class BenchmarkExecutor(SmartAttentionExecutor):
@@ -193,10 +194,13 @@ def run_multidim_benchmark():
                 })
 
     # Save
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    csv_filename = f"paper_results_multidim_{timestamp}.csv"
+    
     df = pd.DataFrame(results)
-    df.to_csv("paper_results_multidim.csv", index=False)
-    print("\n[Done] Results saved to 'paper_results_multidim.csv'")
-
+    df.to_csv(csv_filename, index=False)
+    
+    print(f"\n[Done] Results saved to '{csv_filename}'")
 
 if __name__ == "__main__":
     run_multidim_benchmark()
