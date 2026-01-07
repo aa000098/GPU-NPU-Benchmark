@@ -2,12 +2,19 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+import time
 
 # ==========================================
 # 설정: 저장할 폴더 이름 및 데이터 파일
 # ==========================================
 DATA_FILE = "paper_results_multidim.csv"
-OUTPUT_DIR = "paper_images"  # 이미지를 저장할 폴더명
+#DATA_FILE = "paper_results_multidim_20260103_174358.csv"
+#OUTPUT_DIR = "paper_images"  # 이미지를 저장할 폴더명
+BASE_DIR = "paper_images"  # 이미지를 저장할 폴더명
+timestamp = time.strftime("%Y%m%d_%H%M%S")
+
+# 2. 경로 합치기 (예: paper_images/20260103_175500)
+OUTPUT_DIR = os.path.join(BASE_DIR, timestamp)
 
 # 폴더가 없으면 생성 (있으면 무시)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -23,7 +30,8 @@ def load_data():
 # ==========================================
 def plot_prefill(df):
     # d=1536 (Qwen-1.5B급) 데이터만 필터링
-    subset = df[(df['exp_type'] == 'prefill_multidim') & (df['d'] == 1536)].sort_values('n')
+#    subset = df[(df['exp_type'] == 'prefill_multidim') & (df['d'] == 1536)].sort_values('n')
+    subset = df[(df['exp_type'] == 'prefill_multidim') & (df['d'] == 1536) & (df['n'] > 32)].sort_values('n')
     
     plt.figure(figsize=(8, 5))
     
@@ -35,7 +43,7 @@ def plot_prefill(df):
     plt.yscale('log')
     plt.xlabel('Sequence Length ($n$)', fontsize=12, fontweight='bold')
     plt.ylabel('Latency (ms) - Log Scale', fontsize=12, fontweight='bold')
-    plt.title('Fig 1. Prefill Phase Performance ($d=1536$)', fontsize=14, fontweight='bold')
+#    plt.title('Fig 1. Prefill Phase Performance ($d=1536$)', fontsize=14, fontweight='bold')
     plt.legend(fontsize=11)
     plt.grid(True, which="both", ls="-", alpha=0.4)
     
@@ -184,7 +192,7 @@ def plot_decode_fp16_hybrid(df):
     
     plt.xlabel('Hidden Dimension ($d$)', fontsize=12, fontweight='bold')
     plt.ylabel('Latency (ms)', fontsize=12, fontweight='bold')
-    plt.title('Fig 2-a. Decode Phase (FP16): Selected Hybrid Cases', fontsize=14, fontweight='bold')
+#    plt.title('Fig 2-a. Decode Phase (FP16): Selected Hybrid Cases', fontsize=14, fontweight='bold')
     
     # X축 라벨 (차원 d)
     plt.xticks(x, hybrid_subset['d'].astype(int))
@@ -237,7 +245,7 @@ def plot_decode_int8_hybrid(df):
     
     # 막대 그리기
     # Baseline: 해당 차원(d)의 FP16 GPU 성능 (없으면 현재 행의 GPU INT8 사용)
-    baselines = hybrid_subset['gpu_lat'].values
+    #baselines = hybrid_subset['gpu_lat'].values
     #for d_val in hybrid_subset['d']:
     #    if d_val in fp16_subset.index:
     #        baselines.append(fp16_subset[d_val])
@@ -251,7 +259,7 @@ def plot_decode_int8_hybrid(df):
     
     plt.xlabel('Hidden Dimension ($d$)', fontsize=12, fontweight='bold')
     plt.ylabel('Latency (ms)', fontsize=12, fontweight='bold')
-    plt.title('Fig 2-b. Decode Phase (INT8): Selected Hybrid Cases', fontsize=14, fontweight='bold')
+#    plt.title('Fig 2-b. Decode Phase (INT8): Selected Hybrid Cases', fontsize=14, fontweight='bold')
     
     plt.xticks(x, hybrid_subset['d'].astype(int))
     plt.legend(fontsize=11)
@@ -260,7 +268,8 @@ def plot_decode_int8_hybrid(df):
     # 상세 정보 표시
     for i in range(len(hybrid_subset)):
         row = hybrid_subset.iloc[i]
-        base_val = baselines[i]
+        #base_val = baselines[i]
+        base_val = min(row['gpu_lat'], row['npu_lat'])
         
         # 1. Plan 표시
         plan_str = row['plan'].replace("'", "").replace("(", "").replace(")", "").replace(", ", "→")
