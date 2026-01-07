@@ -4,6 +4,7 @@ import numpy as np
 import time
 import os
 import math
+from datetime import datetime
 from tqdm import tqdm  # 진행률 표시 (없으면 pip install tqdm)
 
 # 수정한 profile_attention 모듈 import
@@ -15,8 +16,12 @@ def get_padding_overhead(val, align=32):
     if val == 0: return 0
     return (aligned_val - val) / aligned_val
 
-def collect_benchmark_data(filename="attention_profile_data.csv"):
-    
+def collect_benchmark_data(filename=None):
+    if filename is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"attention_profile_data_{timestamp}.csv"
+        #print(f"Output Filename: {filename}")
+
     # === 1. 탐색할 공간 설정 (Sweep Space) ===
     # 시퀀스 길이 (n)
     seq_lens = [1, 32, 64, 128, 256, 384, 512, 768, 1024, 1536, 2048, 4096]
