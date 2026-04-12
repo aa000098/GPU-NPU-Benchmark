@@ -12,3 +12,20 @@ logs
 tags
 
 models_cache
+
+my_rknn/dummy_data/
+
+# Large model files
+*.rkllm
+*.safetensors
+*.mnn.weight
+
+# Packages
+*.whl
+*.tar.gz
+
+# Cache
+.cache/
+
+# Local settings
+.claude/settings.local.json
