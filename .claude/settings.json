@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ':*)",
+      "Bash(python -c \"import torch; print\\(f'torch {torch.__version__}'\\)\")",
+      "Bash(/home/hyunho.son/install_files/MNN/build/llm_bench -m /home/hyunho.son/Desktop/project/GPU-NPU-Benchmark/llm_quant_bench/mnn_models/M2_q4_b64_direct/config.json -a cpu -t 4 -p 64 -n 256 -rep 3)",
+      "Bash(tmux capture-pane:*)",
+      "WebSearch",
+      "Bash(ls -la /home/hyunho.son/Desktop/project/GPU-NPU-Benchmark/my_rknn/*.py)",
+      "Bash(find /home/hyunho.son/Desktop/project/GPU-NPU-Benchmark -type f \\\\\\( -name \"*.py\" -o -name \"*.cpp\" -o -name \"*.c\" \\\\\\) -exec grep -l \"GFLOPS\\\\|gflops\\\\|bandwidth\\\\|memory.*bandwidth\\\\|roofline\\\\|arithmetic\" {} \\\\;)",
+      "Read(//sys/devices/platform/**)",
+      "Read(//dev/**)",
+      "Bash(nm -D /home/hyunho.son/install_files/rknn-llm/rkllm-runtime/Linux/librkllm_api/aarch64/librkllmrt.so)",
+      "Bash(find /home/hyunho.son/install_files/rknn-llm/examples -type f \\\\\\( -name \"*.cpp\" -o -name \"*.c\" \\\\\\) -exec grep -l \"callback\\\\|timing\\\\|memory\\\\|profile\" {} \\\\;)",
+      "Bash(readelf -d /home/hyunho.son/install_files/rknn-llm/rkllm-runtime/Linux/librkllm_api/aarch64/librkllmrt.so)",
+      "Bash(grep -E \"0x[0-9a-fA-F]{4,8}|_IOR|_IOW|_IOWR\")",
+      "Bash(objdump -d /home/hyunho.son/install_files/rknn-llm/rkllm-runtime/Linux/librkllm_api/aarch64/librkllmrt.so)",
+      "Bash(readelf -s /home/hyunho.son/install_files/rknn-llm/rkllm-runtime/Linux/librkllm_api/aarch64/librkllmrt.so)",
+      "Bash(ls -la /dev/rknpu*)",
+      "Bash(cat /sys/devices/platform/fdab0000.npu/devfreq/devfreq*/type)",
+      "Bash(ls /dev/rknpu*)",
+      "Read(//home/hyunho.son/Desktop/project/RknnReverseEngineering/**)",
+      "Bash(tmux send-keys:*)",
+      "Bash(chmod +x /home/hyunho.son/Desktop/project/RknnReverseEngineering/run_strace.sh)",
+      "Bash(awk -F',' '$2 != \"0\" && $2 != \"npu_load\"')",
+      "Bash(awk -F',' '{print $3}')",
+      "Bash(awk -F',' '$2 > 0 || $3 > 0 || $4 > 0' /home/hyunho.son/Desktop/project/RknnReverseEngineering/npu_monitor_v2.csv)",
+      "Bash(awk -F',' 'NR>1 {if\\($2>max\\)max=$2} END{print \"Core0 max:\", max\"%\"}' /home/hyunho.son/Desktop/project/RknnReverseEngineering/npu_monitor_v2.csv)",
+      "Bash(awk -F',' 'NR>1 && \\($2>0 || $3>0 || $4>0\\)' /home/hyunho.son/Desktop/project/RknnReverseEngineering/npu_monitor_v2.csv)",
+      "Bash(awk -F',' 'NR>1 {if\\($2>m0\\)m0=$2; if\\($3>m1\\)m1=$3; if\\($4>m2\\)m2=$4} END{print \"Core0:\", m0\"%, Core1:\", m1\"%, Core2:\", m2\"%\"}' /home/hyunho.son/Desktop/project/RknnReverseEngineering/npu_monitor_v2.csv)",
+      "Bash(ls -la backend_selection/paper_results_multidim_*.csv)",
+      "Bash(ls -la benchmark/attention_profile_data_*.csv)",
+      "Bash(find llm_quant_bench -type f \\\\\\( -name \"*.rkllm\" -o -name \"*.bin\" -o -name \"*.tar.gz\" \\\\\\) -exec ls -lh {} \\\\;)"
+    ],
+    "additionalDirectories": [
+      "/home/hyunho.son/Desktop/project/RknnReverseEngineering"
+    ]
+  }
+}
