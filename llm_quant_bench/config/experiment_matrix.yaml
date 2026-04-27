@@ -1,0 +1,117 @@
+# Experiment Matrix for LLM Quantization Benchmark on RK3588
+# Model: Gemma 4 E2B (fallback: Gemma 3 2B → Gemma 2 2B)
+
+model:
+  primary: "meta-llama/Llama-3.2-1B-Instruct"
+  model_type: "llama"
+  local_path: "./models/Llama-3.2-1B-Instruct"
+
+benchmark:
+  prompt_lengths: [64, 256]
+  generate_length: 256
+  warmup_runs: 5
+  measure_runs: 10
+  max_context_len: 4096
+
+# RKNN-LLM configurations (NPU, 3 cores)
+rknn_configs:
+  R1:
+    quantized_dtype: "W8A8"
+    quantized_algorithm: "normal"
+    group_size: null
+    description: "8-bit weights + activations, channel-wise"
+  R2:
+    quantized_dtype: "W8A8"
+    quantized_algorithm: "normal"
+    group_size: 128
+    description: "8-bit, group size 128"
+  R3:
+    quantized_dtype: "W8A8"
+    quantized_algorithm: "normal"
+    group_size: 256
+    description: "8-bit, group size 256"
+  R4:
+    quantized_dtype: "W8A8"
+    quantized_algorithm: "normal"
+    group_size: 512
+    description: "8-bit, group size 512"
+  R5:
+    quantized_dtype: "W4A16"
+    quantized_algorithm: "grq"
+    group_size: null
+    description: "4-bit weights, 16-bit activations, GRQ"
+  R6:
+    quantized_dtype: "W4A16"
+    quantized_algorithm: "grq"
+    group_size: 32
+    description: "4-bit GRQ, group size 32"
+  R7:
+    quantized_dtype: "W4A16"
+    quantized_algorithm: "grq"
+    group_size: 64
+    description: "4-bit GRQ, group size 64"
+  R8:
+    quantized_dtype: "W4A16"
+    quantized_algorithm: "grq"
+    group_size: 128
+    description: "4-bit GRQ, group size 128"
+
+# MNN configurations (CPU + OpenCL GPU)
+mnn_configs:
+  M1:
+    quant_bit: 4
+    quant_block: 0
+    method: "direct"
+    flags: []
+    description: "4-bit channel-wise"
+  M2:
+    quant_bit: 4
+    quant_block: 64
+    method: "direct"
+    flags: []
+    description: "4-bit block-64"
+  M3:
+    quant_bit: 4
+    quant_block: 128
+    method: "direct"
+    flags: []
+    description: "4-bit block-128"
+  M4:
+    quant_bit: 8
+    quant_block: 0
+    method: "direct"
+    flags: []
+    description: "8-bit channel-wise"
+  M5:
+    quant_bit: 8
+    quant_block: 64
+    method: "direct"
+    flags: []
+    description: "8-bit block-64"
+  M6:
+    quant_bit: 4
+    quant_block: 64
+    method: "awq"
+    flags: ["--awq"]
+    description: "4-bit AWQ block-64"
+  M7:
+    quant_bit: 4
+    quant_block: 64
+    method: "smooth"
+    flags: ["--smooth"]
+    description: "4-bit Smooth Quant block-64"
+  M8:
+    quant_bit: 4
+    quant_block: 64
+    method: "hqq"
+    flags: ["--hqq"]
+    description: "4-bit HQQ block-64"
+
+# MNN backends to test
+mnn_backends:
+  - name: "cpu"
+    backend_type: "cpu"
+    threads: 4
+  - name: "gpu"
+    backend_type: "opencl"
+    threads: 4
