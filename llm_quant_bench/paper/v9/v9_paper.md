@@ -308,16 +308,37 @@ MNN core kernel onExecute에 시간 instrumentation을 추가하여 ctx=1024 W8A
 
 **모든 양자화 matmul이 ~20-21 GB/s = LPDDR5 27 GB/s peak의 76-78%에 균일 saturate**. 이는 다른 op로 짤 여지가 거의 없음을 의미. 95% decode time이 큰 matmul 3개 (FFN/proj/LM head). Edge LLM decode의 진짜 병목은 LPDDR5 BW 자체이며, MNN W8 baseline이 이미 sustained peak의 ~99%에 도달.
 
-**Cross-backend per-phase 효율 (corrected NPU values from §4.6)**:
+**Cross-backend per-op latency table (W8A8 model, decode-dominant -p 16 -n 100):**
 
-| Backend | Decode @ ctx=1024 | Effective BW | % LPDDR5 peak |
-|---|---:|---:|---:|
-| CPU MNN W4 (t=2 single A76 cluster) | 29.40 (+6.5% vs t=4) | 20.5 GB/s | 76% |
-| CPU MNN W8 | 15.66 | 19.4 GB/s | 72% |
-| NPU RKLLM W8 | 17.28 | 21.4 GB/s | 79% |
-| GPU MNN W8 | 6.6 (ctx=512) | 8.2 GB/s | 30% |
+| Op | Shape | CPU MNN | GPU MNN OpenCL | NPU RKNN direct (M=1) |
+|---|---|---:|---:|---:|
+| QKV proj (W8/W4) | 1×2048→3072 | **0.41 / 0.24** | 0.82 / 0.65 | 1.85 (M=1) |
+| FFN gate/up (W8/W4) | 1×2048→8192 | **0.81 / 0.47** | 1.15 / 0.97 | 4.74 |
+| FFN down (W8/W4) | 1×8192→2048 | **0.81 / 0.47** | 1.15 / 0.97 | 3.63 |
+| LM head (W8/W4) | 1×2048→128256 | **12.57 / 6.95** | 13.47 / 9.27 | 51.43 |
+| Attention (decode, ctx=1024) | KV stream | **0.05** | (no fused path) | (RKLLM hidden) |
+| RMSNorm | (2048) | **0.007** | <0.1 | N/A |
 
-(`-t 2` cores 4-5 (single A76 cluster) finding: 전 cores 4-7 사용 대비 W4 +6.5% 가속 — RK3588 cluster L2 locality 활용)
+**모든 op에서 CPU MNN이 winner**. GPU LM head만 30% 차이 이내 (1.07× CPU W8, 1.33× CPU W4)로 근접. NPU는 단일 토큰 decode에선 launch overhead로 4-13× 손해.
+
+**Per-op cross-backend allocation 결과**: decode 모든 op = CPU MNN W4. GPU/NPU에 offload 할 op 없음. 이는 (i) GPU OpenCL backend의 작은 batch GEMV 비효율, (ii) NPU의 launch overhead, (iii) LPDDR5 27 GB/s 공유로 어느 backend도 BW 우위 없음 의 종합 결과.
+
+### 4.7d′ A76 single-cluster pinning: production gain (validated)
+
+W8A8 모델에서 thread-to-core pinning 변경만으로 측정된 가속:
+
+| ctx | t=4 cores 4-7 (default) | t=2 cores 4-5 (cluster pin) | Δ |
+|---:|---:|---:|---:|
+| 64 | 15.91 | 17.13 | **+7.7%** |
+| 512 | 14.89 | 16.27 | **+9.3%** |
+| 1024 | 14.22 | 15.44 | **+8.6%** |
+| **평균** | | | **+8.5%** |
+
+W4 모델은 mixed (ctx=64 +8%, 그 외 ±3%) — W4의 적은 weight (696 MB vs W8 1.24 GB)로 cross-cluster L2 traffic 부담이 적기 때문. **W8 production deployment에선 무조건 cluster pin 권장**.
+
+**Mechanism**: RK3588은 4×Cortex-A76을 2+2 cluster로 분할 (cores 4-5 / cores 6-7), cluster당 private 512KB L2. 4 thread를 두 cluster에 분산하면 weight matrix를 양쪽 L2가 다 가져오면서 coherence/snoop traffic 발생. 단일 cluster에 pin하면 L2 hit 늘고 LPDDR5 traffic 감소.
+
+코드 수정 0줄, 환경변수 또는 launch 인자 수정만으로 +8.5% — **무료 production gain**.
 
 ### 4.7e Edge NPU에서의 vLLM-style Speculative Decoding 적용성: 정량 negative result
 
