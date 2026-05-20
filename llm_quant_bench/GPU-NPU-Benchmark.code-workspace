@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"path": "../../../../install_files"
+		},
+		{
+			"path": "../../RknnReverseEngineering"
+		}
+	],
+	"settings": {}
+}
