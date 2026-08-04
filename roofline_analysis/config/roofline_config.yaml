@@ -1,0 +1,123 @@
+# 3-Backend Roofline Analysis Configuration
+# RK3588: CPU (Cortex-A76 x4) + GPU (Mali-G610 MC4) + NPU (RKNN 3-core)
+
+hardware:
+  cpu:
+    name: "Cortex-A76 x4"
+    threads: 4
+    isa: "ARMv8.2-A + NEON"
+    l2_cache_kb: 512  # per core
+  gpu:
+    name: "Mali-G610 MC4"
+    backend: "opencl"
+    tile_m: 16
+    tile_n: 16
+  npu:
+    name: "RKNN 3-core"
+    core_mask: 7  # NPU_CORE_0_1_2
+    target_platform: "rk3588"
+
+system:
+  memory: "LPDDR4x"
+  memory_gb: 8
+  theoretical_bandwidth_gb_s: 34.1  # 4266 MT/s x 64-bit
+
+peak_compute:
+  sizes: [32, 64, 128, 256, 512, 1024]
+  reps: 5
+  warmup: 3
+  dtypes:
+    cpu: ["float32", "float16", "int8"]
+    gpu: ["float16", "float32"]
+    npu: ["int8"]
+
+mem_bandwidth:
+  sizes_mb: [1, 4, 16, 64, 128]
+  sizes_mb_npu: [1, 2, 4, 8]  # NPU uses smaller sizes (RKNN build is very slow for large models)
+  reps: 10
+  warmup: 3
+  operations: ["copy", "scale", "add", "triad"]
+
+llm_profiling:
+  model:
+    name: "Llama-3.2-1B-Instruct"
+    local_path: "../llm_quant_bench/models/Llama-3.2-1B-Instruct"
+  seq_lengths: [1, 16, 64, 128, 256, 512, 1024, 2048]
+  generate_length: 128
+  warmup_runs: 3
+  measure_runs: 10
+  max_context_len: 4096
+
+  backends:
+    cpu_mnn:
+      framework: "mnn"
+      backend_type: "cpu"
+      threads: 4
+      configs:
+        - id: "M9"
+          description: "W8A8 channel-wise"
+          quant_bit: 8
+          bytes_per_weight: 1
+          bytes_per_activation: 1
+          bytes_per_kv: 2  # MNN KV cache is FP16
+    gpu_mnn:
+      framework: "mnn"
+      backend_type: "opencl"
+      threads: 4
+      configs:
+        - id: "M9"
+          description: "W8A8 channel-wise"
+          quant_bit: 8
+          bytes_per_weight: 1
+          bytes_per_activation: 1
+          bytes_per_kv: 2
+    npu_rknn:
+      framework: "rknn-llm"
+      backend_type: "npu"
+      configs:
+        - id: "R1"
+          description: "W8A8 channel-wise"
+          quantized_dtype: "W8A8"
+          bytes_per_weight: 1
+          bytes_per_activation: 1
+          bytes_per_kv: 1
+
+# Llama-3.2-1B architecture parameters (for arithmetic intensity calculation)
+model_arch:
+  name: "Llama-3.2-1B"
+  hidden_dim: 2048
+  num_heads: 32
+  head_dim: 64
+  num_kv_heads: 8
+  num_layers: 16
+  vocab_size: 128256
+  intermediate_size: 8192
+
+# Quantization configs for arithmetic intensity analysis
+quant_configs:
+  W8A8:
+    bytes_per_weight: 1
+    bytes_per_activation: 1
+    bytes_per_kv: 1
+    description: "INT8 weights + INT8 activations"
+  W4A16:
+    bytes_per_weight: 0.5
+    bytes_per_activation: 2
+    bytes_per_kv: 2
+    description: "INT4 weights + FP16 activations"
+  W4A8:
+    bytes_per_weight: 0.5
+    bytes_per_activation: 1
+    bytes_per_kv: 1
+    description: "INT4 weights + INT8 activations"
+  FP16:
+    bytes_per_weight: 2
+    bytes_per_activation: 2
+    bytes_per_kv: 2
+    description: "FP16 weights + FP16 activations"
+
+# Visualization
+colors:
+  cpu: "#3498DB"    # Blue
+  gpu: "#2ECC71"    # Green
+  npu: "#E74C3C"    # Red
